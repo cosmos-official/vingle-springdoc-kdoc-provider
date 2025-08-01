@@ -6,4 +6,4 @@ before_install:
 install:
   - ./gradlew publishToMavenLocal --stacktrace
 env:
-  - GRADLE_OPTS="-Xmx2048m -Xms512m"
+  GRADLE_OPTS: "-Xmx2048m -Xms512m"
