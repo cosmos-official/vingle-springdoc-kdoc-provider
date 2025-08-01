@@ -32,11 +32,8 @@ Add the dependencies:
 
 ```kotlin
 dependencies {
-    // Runtime library
-    implementation("com.github.vingle:vingle-springdoc-kdoc-provider:1.0.0")
-    
-    // KSP processor
-    ksp("com.github.vingle:vingle-springdoc-kdoc-provider:1.0.0")
+    implementation("com.github.cosmos-official.vingle-springdoc-kdoc-provider:kdoc-runtime:v1.0.1")
+    ksp("com.github.cosmos-official.vingle-springdoc-kdoc-provider:kdoc-processor:v1.0.1")
 }
 ```
 
@@ -69,7 +66,7 @@ class UserController {
 }
 ```
 
-### 2. Configure KSP processor
+### 2. (Optional) Configure KSP processor
 
 Add processor options in your `build.gradle.kts`:
 
@@ -81,7 +78,9 @@ ksp {
 }
 ```
 
-### 3. Access documentation at runtime
+### 3. (Optional) Access documentation at runtime
+This process is automatically done by SpringDoc when you have dependency.
+Refer [this](https://springdoc.org/#javadoc-support)
 
 ```kotlin
 import dev.vingle.kdoc.RuntimeKDoc
