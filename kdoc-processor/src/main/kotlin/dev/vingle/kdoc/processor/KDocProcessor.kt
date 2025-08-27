@@ -163,12 +163,26 @@ class KDocProcessor(
                 try {
                     param.type.resolve().declaration.simpleName.asString()
                 } catch (e: Exception) {
-                    // Fallback for unresolved types
-                    param.type.toString()
+                    // Fallback for unresolved types - handle more gracefully
+                    try {
+                        // Try to get a more meaningful name from the type string
+                        val typeString = param.type.toString()
+                        // Extract simple name from complex types like "ProductFolderStatus?" or "kotlin.Int?"
+                        typeString.substringAfterLast('.').substringBefore('?').substringBefore('<')
+                    } catch (fallbackException: Exception) {
+                        // Last resort fallback
+                        "Unknown"
+                    }
                 }
             }
 
-            val parsedKDoc = parseKDocComment(function.docString)
+            val parsedKDoc = try {
+                parseKDocComment(function.docString)
+            } catch (e: Exception) {
+                // Don't fail the entire function if KDoc parsing fails
+                logger.warn("Failed to parse KDoc for function ${functionName}: ${e.message}")
+                ParsedKDoc(CommentKDoc.empty())
+            }
 
             MethodKDoc(
                 name = functionName,
@@ -183,7 +197,23 @@ class KDocProcessor(
             )
         } catch (e: Exception) {
             logger.error("Error processing function ${function.simpleName.asString()}: ${e.message}")
-            null
+            // Return a minimal MethodKDoc instead of null to avoid losing the function entirely
+            try {
+                MethodKDoc(
+                    name = function.simpleName.asString(),
+                    paramTypes = function.parameters.map { "Unknown" },
+                    comment = CommentKDoc.empty(),
+                    params = emptyList(),
+                    returns = CommentKDoc.empty(),
+                    throws = emptyList(),
+                    seeAlso = emptyList(),
+                    other = emptyList(),
+                    isConstructor = isConstructor
+                )
+            } catch (finalException: Exception) {
+                logger.error("Failed to create minimal MethodKDoc for ${function.simpleName.asString()}: ${finalException.message}")
+                null
+            }
         }
     }
 
@@ -207,7 +237,12 @@ class KDocProcessor(
                     try {
                         param.type.resolve().declaration.simpleName.asString()
                     } catch (e: Exception) {
-                        param.type.toString()
+                        try {
+                            val typeString = param.type.toString()
+                            typeString.substringAfterLast('.').substringBefore('?').substringBefore('<')
+                        } catch (fallbackException: Exception) {
+                            "Unknown"
+                        }
                     }
                 }
                 "${function.simpleName.asString()}_$paramTypesStr"
@@ -219,8 +254,13 @@ class KDocProcessor(
                 try {
                     param.type.resolve().declaration.simpleName.asString()
                 } catch (e: Exception) {
-                    // Fallback for unresolved types
-                    param.type.toString()
+                    // Fallback for unresolved types - handle more gracefully
+                    try {
+                        val typeString = param.type.toString()
+                        typeString.substringAfterLast('.').substringBefore('?').substringBefore('<')
+                    } catch (fallbackException: Exception) {
+                        "Unknown"
+                    }
                 }
             })
             content.append(function.docString ?: "")
@@ -233,8 +273,13 @@ class KDocProcessor(
                 try {
                     param.type.resolve().declaration.simpleName.asString()
                 } catch (e: Exception) {
-                    // Fallback for unresolved types
-                    param.type.toString()
+                    // Fallback for unresolved types - handle more gracefully
+                    try {
+                        val typeString = param.type.toString()
+                        typeString.substringAfterLast('.').substringBefore('?').substringBefore('<')
+                    } catch (fallbackException: Exception) {
+                        "Unknown"
+                    }
                 }
             })
             content.append(constructor.docString ?: "")
