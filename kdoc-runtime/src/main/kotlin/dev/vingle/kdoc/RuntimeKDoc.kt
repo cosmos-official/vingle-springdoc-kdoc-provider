@@ -13,17 +13,23 @@ object RuntimeKDoc {
     private val json = Json { ignoreUnknownKeys = true }
     private val classKDocCache = mutableMapOf<String, ClassKDoc>()
     
-    // Type mapping for primitive vs boxed types
-    private val typeMapping = mapOf(
-        "Long" to "long", "long" to "Long",
-        "Boolean" to "boolean", "boolean" to "Boolean", 
-        "Int" to "int", "int" to "Int",
-        "Double" to "double", "double" to "Double",
-        "Float" to "float", "float" to "Float",
-        "Byte" to "byte", "byte" to "Byte",
-        "Short" to "short", "short" to "Short",
-        "Char" to "char", "char" to "Char"
+    // Type mapping for primitive vs boxed types - organized in pairs for easier maintenance
+    private val primitiveToBoxed = mapOf(
+        "long" to "Long", "boolean" to "Boolean", "int" to "Int", 
+        "double" to "Double", "float" to "Float", "byte" to "Byte",
+        "short" to "Short", "char" to "Char"
     )
+    
+    private val boxedToPrimitive = primitiveToBoxed.entries.associate { it.value to it.key }
+    
+    // Additional Kotlin-Java type mappings
+    private val kotlinToJavaTypes = mapOf(
+        "Int" to "Integer", "Long" to "Long", "Boolean" to "Boolean",
+        "Double" to "Double", "Float" to "Float", "Byte" to "Byte",
+        "Short" to "Short", "Char" to "Character"
+    )
+    
+    private val javaToKotlinTypes = kotlinToJavaTypes.entries.associate { it.value to it.key }
     
     /**
      * Get KDoc documentation for a class
@@ -63,11 +69,37 @@ object RuntimeKDoc {
         val classKDoc = getKDoc(method.declaringClass)
         val paramTypeNames = method.parameterTypes.map { it.simpleName }
 
-        return classKDoc.methods.find { methodKDoc ->
-            methodKDoc.name == method.name &&
-            methodKDoc.paramTypes.size == paramTypeNames.size &&
-            isParameterTypesMatch(methodKDoc.paramTypes, paramTypeNames)
-        } ?: dev.vingle.kdoc.model.MethodKDoc.empty(method.name, paramTypeNames)
+        // Debug logging - can be enabled for troubleshooting
+        val debugEnabled = System.getProperty("kdoc.debug", "false").toBoolean()
+        
+        if (debugEnabled) {
+            println("DEBUG: Looking for method ${method.name} with param types: $paramTypeNames")
+            println("DEBUG: Available methods in ${method.declaringClass.simpleName}:")
+            classKDoc.methods.forEach { methodKDoc ->
+                println("  - ${methodKDoc.name}(${methodKDoc.paramTypes.joinToString(", ")})")
+            }
+        }
+
+        val found = classKDoc.methods.find { methodKDoc ->
+            val nameMatch = methodKDoc.name == method.name
+            val sizeMatch = methodKDoc.paramTypes.size == paramTypeNames.size
+            val typeMatch = isParameterTypesMatch(methodKDoc.paramTypes, paramTypeNames)
+            
+            if (debugEnabled && nameMatch) {
+                println("DEBUG: Checking ${methodKDoc.name}: nameMatch=$nameMatch, sizeMatch=$sizeMatch, typeMatch=$typeMatch")
+                if (sizeMatch && !typeMatch) {
+                    println("DEBUG: Type mismatch details:")
+                    methodKDoc.paramTypes.zip(paramTypeNames).forEach { (kdoc, reflection) ->
+                        val match = isTypeMatch(kdoc, reflection)
+                        println("    $kdoc vs $reflection = $match")
+                    }
+                }
+            }
+            
+            nameMatch && sizeMatch && typeMatch
+        }
+
+        return found ?: dev.vingle.kdoc.model.MethodKDoc.empty(method.name, paramTypeNames)
     }
     
     /**
@@ -82,11 +114,37 @@ object RuntimeKDoc {
      */
     private fun isParameterTypesMatch(kdocTypes: List<String>, reflectionTypes: List<String>): Boolean {
         return kdocTypes.zip(reflectionTypes).all { (kdocType, reflectionType) ->
-            kdocType == reflectionType || 
-            typeMapping[kdocType] == reflectionType ||
-            kdocType.endsWith(reflectionType) || 
-            reflectionType.endsWith(kdocType)
+            isTypeMatch(kdocType, reflectionType)
         }
+    }
+    
+    /**
+     * Check if two types match, considering all possible type mappings
+     */
+    private fun isTypeMatch(kdocType: String, reflectionType: String): Boolean {
+        // Direct match
+        if (kdocType == reflectionType) return true
+        
+        // Primitive <-> Boxed type mapping
+        if (primitiveToBoxed[kdocType] == reflectionType) return true
+        if (boxedToPrimitive[kdocType] == reflectionType) return true
+        
+        // Kotlin <-> Java type mapping (for nullable types)
+        if (kotlinToJavaTypes[kdocType] == reflectionType) return true
+        if (javaToKotlinTypes[kdocType] == reflectionType) return true
+        
+        // Simple name matching (for enums and classes)
+        val kdocSimpleName = kdocType.substringAfterLast('.')
+        val reflectionSimpleName = reflectionType.substringAfterLast('.')
+        if (kdocSimpleName == reflectionSimpleName) return true
+        if (kdocSimpleName == reflectionType) return true
+        if (kdocType == reflectionSimpleName) return true
+        
+        // Ends with matching (for nested classes)
+        if (kdocType.endsWith(reflectionType)) return true
+        if (reflectionType.endsWith(kdocType)) return true
+        
+        return false
     }
     
     /**
