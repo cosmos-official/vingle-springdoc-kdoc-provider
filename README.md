@@ -10,11 +10,10 @@ This library consists of two modules:
 
 ## Features
 
-- ✅ Extract KDoc comments from Kotlin classes and methods
-- ✅ Compatible with `therapi-runtime-javadoc` API
-- ✅ Support for SpringDoc OpenAPI integration
-- ✅ Automatic JSON generation for runtime access
+- ✅ Extract KDoc comments as JSON from Kotlin classes and methods, thus accessible at runtime.
 - ✅ Incremental processing with caching
+- ✅ Support for SpringDoc OpenAPI integration
+- ✅ Compatible with `therapi-runtime-javadoc` API (1-on-1 replaceable)
 
 ## Installation
 
@@ -32,8 +31,8 @@ Add the dependencies:
 
 ```kotlin
 dependencies {
-    implementation("com.github.cosmos-official.vingle-springdoc-kdoc-provider:kdoc-runtime:v1.0.4")
-    ksp("com.github.cosmos-official.vingle-springdoc-kdoc-provider:kdoc-processor:v1.0.4")
+    implementation("com.github.cosmos-official.vingle-springdoc-kdoc-provider:kdoc-runtime:v1.0.5")
+    ksp("com.github.cosmos-official.vingle-springdoc-kdoc-provider:kdoc-processor:v1.0.5")
 }
 ```
 
@@ -66,21 +65,9 @@ class UserController {
 }
 ```
 
-### 2. (Optional) Configure KSP processor
-
-Add processor options in your `build.gradle.kts`:
-
-```kotlin
-ksp {
-    arg("kdoc.packages", "com.yourcompany.api,com.yourcompany.controller")
-    arg("kdoc.disable-cache", "false")
-    arg("kdoc.force-regenerate", "false")
-}
-```
-
-### 3. (Optional) Access documentation at runtime
+### 2. (Optional) Access comments at runtime
 This process is automatically done by SpringDoc when you have dependency.
-Refer [this](https://springdoc.org/#javadoc-support)
+Refer to [this](https://springdoc.org/#javadoc-support)
 
 ```kotlin
 import dev.vingle.kdoc.RuntimeKDoc
@@ -92,14 +79,6 @@ val classDoc = RuntimeKDoc.getKDoc(UserController::class.java)
 val methodDoc = classDoc.methods.find { it.name == "getUser" }
 println(methodDoc?.comment?.text) // "Get user by ID"
 ```
-
-## Configuration Options
-
-| Option | Description | Default |
-|--------|-------------|---------|
-| `kdoc.packages` | Comma-separated list of packages to process | All packages |
-| `kdoc.disable-cache` | Disable incremental processing | `false` |
-| `kdoc.force-regenerate` | Force regeneration of all documentation | `false` |
 
 ## therapi-runtime-javadoc Compatibility
 
