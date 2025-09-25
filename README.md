@@ -31,8 +31,8 @@ Add the dependencies:
 
 ```kotlin
 dependencies {
-    implementation("com.github.cosmos-official.vingle-springdoc-kdoc-provider:kdoc-runtime:v1.0.5")
-    ksp("com.github.cosmos-official.vingle-springdoc-kdoc-provider:kdoc-processor:v1.0.5")
+    implementation("com.github.cosmos-official.vingle-springdoc-kdoc-provider:kdoc-runtime:v1.0.6")
+    ksp("com.github.cosmos-official.vingle-springdoc-kdoc-provider:kdoc-processor:v1.0.6")
 }
 ```
 
@@ -93,7 +93,7 @@ val classDoc = RuntimeJavadoc.getJavadoc(UserController::class.java)
 
 ## Build Requirements
 
-- Kotlin 2.0.21+
+- Kotlin 2.2.20+
 - Java 17+
 - Gradle 8.0+
 
