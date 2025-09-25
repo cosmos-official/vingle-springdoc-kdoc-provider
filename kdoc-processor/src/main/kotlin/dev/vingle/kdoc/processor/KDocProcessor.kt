@@ -45,14 +45,15 @@ class KDocProcessor(
     // Thread-safe collections for concurrent access
     private val processedClasses = ConcurrentHashMap.newKeySet<String>()
     private val classContentHashes = ConcurrentHashMap<String, String>()
-    private val processedFilesInCurrentRound = ConcurrentHashMap.newKeySet<KSFile>()
+    private val processedFilesInCurrentRound = ConcurrentHashMap.newKeySet<String>()
 
     override fun process(resolver: Resolver): List<KSAnnotated> {
+        // Ensure the round-scoped set is cleared every round
+        processedFilesInCurrentRound.clear()
         // Clear processing state when cache is disabled or force regenerate is enabled
         if (disableCache || forceRegenerate) {
             processedClasses.clear()
             classContentHashes.clear()
-            processedFilesInCurrentRound.clear()
             if (debugMode) {
                 logger.info("Cache disabled or force regenerate enabled - processing all classes")
             }
@@ -71,7 +72,7 @@ class KDocProcessor(
                 processClass(classSymbol)
                 // Track the source file for dependency management
                 classSymbol.containingFile?.let { file ->
-                    processedFilesInCurrentRound.add(file)
+                    processedFilesInCurrentRound.add(file.filePath)
                 }
             } catch (e: Exception) {
                 logger.error("Error processing class ${classSymbol.qualifiedName?.asString()}: ${e.message}", classSymbol)
