@@ -1,7 +1,5 @@
 package dev.vingle.kdoc.processor
 
-import com.google.devtools.ksp.processing.CodeGenerator
-import com.google.devtools.ksp.processing.Dependencies
 import com.google.devtools.ksp.processing.KSPLogger
 import com.google.devtools.ksp.processing.Resolver
 import com.google.devtools.ksp.processing.SymbolProcessor
@@ -10,7 +8,6 @@ import com.google.devtools.ksp.processing.SymbolProcessorProvider
 import com.google.devtools.ksp.symbol.KSAnnotated
 import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.symbol.KSFunctionDeclaration
-import com.google.devtools.ksp.symbol.KSFile
 import dev.vingle.kdoc.model.ClassKDoc
 import dev.vingle.kdoc.model.CommentKDoc
 import dev.vingle.kdoc.model.MethodKDoc
@@ -18,18 +15,18 @@ import dev.vingle.kdoc.model.OtherKDoc
 import dev.vingle.kdoc.model.ParamKDoc
 import dev.vingle.kdoc.model.SeeAlsoKDoc
 import dev.vingle.kdoc.model.ThrowsKDoc
+import kotlinx.serialization.json.Json
+import java.io.File
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
 
 /**
  * KSP processor that extracts KDoc comments and generates JSON files for runtime access
  */
 class KDocProcessor(
-    private val codeGenerator: CodeGenerator,
     private val logger: KSPLogger,
-    private val options: Map<String, String>
+    private val options: Map<String, String>,
+    private val kspGeneratedDir: String
 ) : SymbolProcessor {
 
     private val json = Json {
@@ -41,13 +38,26 @@ class KDocProcessor(
     private val disableCache = options["kdoc.disable-cache"]?.toBoolean() ?: false
     private val forceRegenerate = options["kdoc.force-regenerate"]?.toBoolean() ?: false
     private val debugMode = options["kdoc.debug"]?.toBoolean() ?: false
-    
+
+    // outputDir: explicit, or derived from KSP's generated directory (kotlin -> resources)
+    private val outputDir = options["kdoc.outputDir"]
+        ?: kspGeneratedDir.replace("/kotlin", "/resources").ifEmpty { null }
+        ?: options["kdoc.projectDir"]?.let { "$it/build/generated/ksp/main/resources" }
+        ?: ""
+
     // Thread-safe collections for concurrent access
     private val processedClasses = ConcurrentHashMap.newKeySet<String>()
     private val classContentHashes = ConcurrentHashMap<String, String>()
     private val processedFilesInCurrentRound = ConcurrentHashMap.newKeySet<String>()
 
     override fun process(resolver: Resolver): List<KSAnnotated> {
+        if (outputDir.isEmpty()) {
+            if (debugMode) {
+                logger.warn("kdoc.outputDir or kdoc.projectDir not set - skipping")
+            }
+            return emptyList()
+        }
+
         // Ensure the round-scoped set is cleared every round
         processedFilesInCurrentRound.clear()
         // Clear processing state when cache is disabled or force regenerate is enabled
@@ -149,9 +159,7 @@ class KDocProcessor(
             other = parsedClassKDoc.other
         )
 
-        // Include source file dependencies for proper incremental compilation
-        val sourceFiles = setOfNotNull(classDeclaration.containingFile)
-        writeKDocToFile(className, classKDoc, sourceFiles)
+        writeKDocToFile(className, classKDoc)
     }
 
     private fun processFunction(
@@ -478,31 +486,20 @@ class KDocProcessor(
         }
     }
 
-    private fun writeKDocToFile(className: String, classKDoc: ClassKDoc, sourceFiles: Set<KSFile> = emptySet()) {
-        val resourcePath = "kdoc/${className.replace('.', '/')}.json"
+    /**
+     * Write KDoc to file system directly instead of using codeGenerator.createNewFile().
+     * This avoids PSI lifetime issues when multiple KSP processors are used together.
+     */
+    private fun writeKDocToFile(className: String, classKDoc: ClassKDoc) {
+        val resourcePath = "$outputDir/kdoc/${className.replace('.', '/')}.json"
+        val file = File(resourcePath)
 
         try {
-            // Create proper dependencies from source files to ensure incremental compilation works correctly
-            val dependencies = if (sourceFiles.isNotEmpty()) {
-                Dependencies(true, *sourceFiles.toTypedArray())
-            } else {
-                Dependencies(false)
-            }
-
-            val file = codeGenerator.createNewFile(
-                dependencies = dependencies,
-                packageName = "",
-                fileName = resourcePath,
-                extensionName = ""
-            )
-
-            file.use { outputStream ->
-                val jsonString = json.encodeToString(classKDoc)
-                outputStream.write(jsonString.toByteArray())
-            }
+            file.parentFile.mkdirs()
+            file.writeText(json.encodeToString(classKDoc))
 
             if (debugMode) {
-                logger.info("Generated KDoc file: $resourcePath with ${sourceFiles.size} dependencies")
+                logger.info("Generated KDoc file: $resourcePath")
             }
         } catch (e: Exception) {
             logger.error("Failed to write KDoc file for $className: ${e.message}")
@@ -515,10 +512,25 @@ class KDocProcessor(
  */
 class KDocProcessorProvider : SymbolProcessorProvider {
     override fun create(environment: SymbolProcessorEnvironment): SymbolProcessor {
+        // Get KSP's generated directory from codeGenerator
+        val kspGeneratedDir = try {
+            val field = environment.codeGenerator.javaClass.getDeclaredField("projectBase")
+            field.isAccessible = true
+            val projectBase = field.get(environment.codeGenerator) as? File
+            projectBase?.let { "${it.absolutePath}/build/generated/ksp/main/kotlin" } ?: ""
+        } catch (e: Exception) {
+            // Fallback: try to get from generatedFile if any exists
+            try {
+                environment.codeGenerator.generatedFile.firstOrNull()?.parentFile?.absolutePath ?: ""
+            } catch (e2: Exception) {
+                ""
+            }
+        }
+
         return KDocProcessor(
-            codeGenerator = environment.codeGenerator,
             logger = environment.logger,
-            options = environment.options
+            options = environment.options,
+            kspGeneratedDir = kspGeneratedDir
         )
     }
-} 
+}
