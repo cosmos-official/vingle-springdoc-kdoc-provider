@@ -12,9 +12,10 @@ data class ClassKDoc(
     val methods: List<MethodKDoc> = emptyList(),
     val constructors: List<MethodKDoc> = emptyList(),
     val seeAlso: List<SeeAlsoKDoc> = emptyList(),
-    val other: List<OtherKDoc> = emptyList()
+    val other: List<OtherKDoc> = emptyList(),
+    val fields: List<FieldKDoc> = emptyList(),
 ) {
-    fun isEmpty(): Boolean = comment.isEmpty() && methods.isEmpty() && constructors.isEmpty()
+    fun isEmpty(): Boolean = comment.isEmpty() && methods.isEmpty() && constructors.isEmpty() && fields.isEmpty()
 }
 
 /**
@@ -98,4 +99,15 @@ data class SeeAlsoKDoc(
 data class OtherKDoc(
     val name: String,
     val comment: CommentKDoc
-) 
+)
+
+/** Represents a KDoc comment for a field. */
+@Serializable
+data class FieldKDoc(
+    val name: String,
+    val comment: CommentKDoc,
+) {
+    companion object {
+        fun empty(fieldName: String) = FieldKDoc(name = fieldName, comment = CommentKDoc.empty())
+    }
+}

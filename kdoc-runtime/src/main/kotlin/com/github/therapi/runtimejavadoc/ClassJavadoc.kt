@@ -28,11 +28,11 @@ class ClassJavadoc private constructor(
     }
     
     /**
-     * Get record components (for compatibility with newer therapi versions)
-     * Returns empty list as Kotlin data classes don't have Java record components
+     * Get record components (for compatibility with newer therapi versions).
+     * Returns an empty list as Kotlin data classes don't have Java record components.
      */
     fun getRecordComponents(): List<ParamJavadoc> = emptyList()
-    
+
     companion object {
         @JvmStatic
         fun fromKDoc(kDoc: ClassKDoc): ClassJavadoc = ClassJavadoc(kDoc)

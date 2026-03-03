@@ -6,10 +6,10 @@ plugins {
 }
 
 dependencies {
-    implementation("com.google.devtools.ksp:symbol-processing-api:2.2.20-2.0.3")
+    implementation(libs.com.google.devtools.ksp.symbol.processing.api)
 
     // JSON for writing documentation data
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
+    implementation(libs.org.jetbrains.kotlinx.kotlinx.serialization.json)
     implementation("org.jetbrains.kotlin:kotlin-stdlib")
 
     // Reference to runtime module for data models

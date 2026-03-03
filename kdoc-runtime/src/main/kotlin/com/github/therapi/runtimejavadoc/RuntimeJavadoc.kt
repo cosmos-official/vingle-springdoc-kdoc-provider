@@ -41,6 +41,6 @@ object RuntimeJavadoc {
     @JvmStatic
     fun getJavadoc(field: java.lang.reflect.Field): FieldJavadoc {
         // For now, return empty field javadoc as KDoc doesn't typically document fields
-        return FieldJavadoc.empty(field.name)
+        return FieldJavadoc.createEmpty(field.name)
     }
 } 

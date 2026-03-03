@@ -52,7 +52,7 @@ object RuntimeKDoc {
         val classKDoc = try {
             val jsonText = resource.use { it.readBytes().decodeToString() }
             json.decodeFromString<ClassKDoc>(jsonText)
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             // Log specific exception types if needed for debugging
             createEmptyClassKDoc(fullyQualifiedClassName)
         }
