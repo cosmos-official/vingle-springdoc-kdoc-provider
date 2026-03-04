@@ -27,7 +27,7 @@ import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * KSP processor that extracts KDoc comments and generates JSON files for runtime access
+ * KSP processor that extracts KDoc comments and generates JSON files for runtime access.
  */
 class KDocProcessor(
     private val codeGenerator: CodeGenerator,

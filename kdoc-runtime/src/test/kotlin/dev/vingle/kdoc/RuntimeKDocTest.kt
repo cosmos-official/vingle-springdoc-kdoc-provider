@@ -47,7 +47,7 @@ internal class RuntimeKDocTest {
         val targetMethod = ExampleClassWithDocs::class.java.getDeclaredMethod("methodWithoutParameters")
         val methodKDoc = RuntimeKDoc.getKDoc(targetMethod)
 
-        assertFalse(methodKDoc.isConstructor);
+        assertFalse(methodKDoc.isConstructor)
         assertIterableEquals(emptySet<Nothing>(), methodKDoc.params)
         assertIterableEquals(emptySet<Nothing>(), methodKDoc.paramTypes)
         val throws = methodKDoc.throws.single()

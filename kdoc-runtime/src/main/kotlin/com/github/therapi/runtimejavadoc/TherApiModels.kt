@@ -53,9 +53,9 @@ class MethodJavadoc private constructor(
         fun createEmpty(executable: Executable): MethodJavadoc {
             return MethodJavadoc(
                 MethodKDoc(
-                    name = "",
+                    name = executable.name,
                     paramTypes = listOf(),
-                    comment = CommentKDoc.empty()
+                    comment = CommentKDoc.empty(),
                 )
             )
         }
