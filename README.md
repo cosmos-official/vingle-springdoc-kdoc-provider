@@ -13,7 +13,7 @@ This library consists of two modules:
 - ✅ Extract KDoc comments as JSON from Kotlin classes and methods, thus accessible at runtime.
 - ✅ Incremental processing with caching
 - ✅ Support for SpringDoc OpenAPI integration
-- ✅ Compatible with `therapi-runtime-javadoc` API (1-on-1 replaceable)
+- ✅ Compatible with the `therapi-runtime-javadoc` API (1-on-1 replaceable)
 
 ## Installation
 
@@ -66,8 +66,8 @@ class UserController {
 ```
 
 ### 2. (Optional) Access comments at runtime
-This process is automatically done by SpringDoc when you have dependency.
-Refer to [this](https://springdoc.org/#javadoc-support)
+This process is automatically done by SpringDoc once you have added the dependencies.
+Please refer to [this documentation page](https://springdoc.org/#javadoc-support).
 
 ```kotlin
 import dev.vingle.kdoc.RuntimeKDoc
