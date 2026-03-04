@@ -11,10 +11,14 @@ import org.junit.jupiter.api.function.Executable
 import java.io.File
 import kotlin.reflect.KFunction
 
+/**
+ * This can be increased whenever the `kctfork` library updates their support.
+ * Currently, there are no tests checking backwards compatibility to older Kotlin versions.
+ */
+private const val testLanguageVersion = "2.3"
+
 @OptIn(ExperimentalCompilerApi::class)
 class GenerateDocumentationFileTest {
-    private val testLanguageVersion = "2.2"
-
     @Test
     fun callWithEmptyArguments() {
         val compilation = KotlinCompilation().apply {
@@ -151,9 +155,9 @@ class GenerateDocumentationFileTest {
                     val json = Json.parseToJsonElement(file.readText())
 
                     val (expectedName, expectedClassDocumentation) = when (file.nameWithoutExtension) {
-                        "A" -> Pair("A", "Layer #1")
-                        "B" -> Pair("A.B", "Layer #2")
-                        "C" -> Pair("A.B.C", "Layer #3")
+                        "A" -> "A" to "Layer #1"
+                        "B" -> "A.B" to "Layer #2"
+                        "C" -> "A.B.C" to "Layer #3"
                         else -> fail("Unexpected class encountered: ${file.name}")
                     }
                     assertEquals(expectedName, json.jsonObject["name"]?.jsonPrimitive?.contentOrNull)
