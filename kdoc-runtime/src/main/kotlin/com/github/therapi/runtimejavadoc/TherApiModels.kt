@@ -1,6 +1,7 @@
 package com.github.therapi.runtimejavadoc
 
 import dev.vingle.kdoc.model.*
+import java.lang.reflect.Executable
 
 /**
  * Compatibility layer for therapi Comment
@@ -49,8 +50,15 @@ class MethodJavadoc private constructor(
         fun fromKDoc(kDoc: MethodKDoc): MethodJavadoc = MethodJavadoc(kDoc)
 
         @JvmStatic
-        fun createEmpty(method: java.lang.reflect.Executable) =
-            MethodJavadoc(MethodKDoc.empty(method.name, method.parameterTypes.map { it.canonicalName }))
+        fun createEmpty(executable: Executable): MethodJavadoc {
+            return MethodJavadoc(
+                MethodKDoc(
+                    name = "",
+                    paramTypes = listOf(),
+                    comment = CommentKDoc.empty()
+                )
+            )
+        }
     }
 }
 
@@ -133,7 +141,13 @@ class FieldJavadoc private constructor(
 
     companion object {
         @JvmStatic
-        fun createEmpty(fieldName: String): FieldJavadoc = FieldJavadoc(FieldKDoc.empty(fieldName))
+        fun empty(fieldName: String): FieldJavadoc = FieldJavadoc(FieldKDoc.empty(fieldName))
+
+        @JvmStatic
+        fun createEmpty(executable: Executable): FieldJavadoc = empty(executable.name)
+
+        @JvmStatic
+        fun createEmpty(fieldName: String): FieldJavadoc = empty(fieldName)
 
         @JvmStatic
         fun fromKDoc(kDoc: FieldKDoc): FieldJavadoc = FieldJavadoc(kDoc)
@@ -148,4 +162,4 @@ class CommentFormatter {
     fun format(comment: Comment): String {
         return comment.getText()
     }
-} 
+}

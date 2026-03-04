@@ -35,4 +35,4 @@ class ClassJavadoc private constructor(
         @JvmStatic
         fun fromKDoc(kDoc: ClassKDoc): ClassJavadoc = ClassJavadoc(kDoc)
     }
-} 
+}

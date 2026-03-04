@@ -11,8 +11,8 @@ import com.google.devtools.ksp.processing.SymbolProcessorProvider
 import com.google.devtools.ksp.symbol.KSAnnotated
 import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.symbol.KSDeclaration
-import com.google.devtools.ksp.symbol.KSFunctionDeclaration
 import com.google.devtools.ksp.symbol.KSFile
+import com.google.devtools.ksp.symbol.KSFunctionDeclaration
 import com.google.devtools.ksp.symbol.KSPropertyDeclaration
 import dev.vingle.kdoc.model.ClassKDoc
 import dev.vingle.kdoc.model.CommentKDoc
@@ -22,9 +22,9 @@ import dev.vingle.kdoc.model.OtherKDoc
 import dev.vingle.kdoc.model.ParamKDoc
 import dev.vingle.kdoc.model.SeeAlsoKDoc
 import dev.vingle.kdoc.model.ThrowsKDoc
+import kotlinx.serialization.json.Json
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
-import kotlinx.serialization.json.Json
 
 /**
  * KSP processor that extracts KDoc comments and generates JSON files for runtime access
@@ -55,11 +55,12 @@ class KDocProcessor(
     // Thread-safe collections for concurrent access
     private val processedClasses = ConcurrentHashMap.newKeySet<String>()
     private val classContentHashes = ConcurrentHashMap<String, String>()
-    private val processedFilesInCurrentRound = ConcurrentHashMap.newKeySet<String>()
+
+    // Collect KDocs during process(), write files in finish()
+    private val collectedKDocs = ConcurrentHashMap<String, ClassKDoc>()
+    private val sourceFiles = ConcurrentHashMap<String, KSFile>()
 
     override fun process(resolver: Resolver): List<KSAnnotated> {
-        // Ensure the round-scoped set is cleared every round
-        processedFilesInCurrentRound.clear()
         // Clear processing state when cache is disabled or force regenerate is enabled
         if (disableCache || forceRegenerate) {
             processedClasses.clear()
@@ -78,20 +79,58 @@ class KDocProcessor(
         symbols.forEach { classSymbol ->
             try {
                 processClass(classSymbol)
-                // Track the source file for dependency management
-                classSymbol.containingFile?.let { file ->
-                    processedFilesInCurrentRound.add(file.filePath)
-                }
             } catch (e: Exception) {
                 logger.error("Error processing class ${classSymbol.qualifiedName?.asString()}: ${e.message}", classSymbol)
             }
         }
 
         if (debugMode) {
-            logger.info("Processed ${processedClasses.size} classes in total, ${processedFilesInCurrentRound.size} files in this round")
+            logger.info("Processed ${processedClasses.size} classes in total")
         }
 
         return emptyList()
+    }
+
+    override fun finish() {
+        if (collectedKDocs.isEmpty()) {
+            if (debugMode) {
+                logger.info("No KDocs to write")
+            }
+            return
+        }
+
+        if (debugMode) {
+            logger.info("Writing ${collectedKDocs.size} KDoc files in finish()")
+        }
+
+        collectedKDocs.forEach { (className, classKDoc) ->
+            try {
+                val filePath = "kdoc/${className.replace('.', '/')}"
+
+                // Get source file for dependency tracking
+                val sourceFile = sourceFiles[className]
+                val dependencies = if (sourceFile != null) {
+                    Dependencies(aggregating = false, sourceFile)
+                } else {
+                    Dependencies(aggregating = false)
+                }
+
+                codeGenerator.createNewFile(
+                    dependencies = dependencies,
+                    packageName = "",
+                    fileName = filePath,
+                    extensionName = "json"
+                ).use { outputStream ->
+                    outputStream.write(json.encodeToString(classKDoc).toByteArray())
+                }
+
+                if (debugMode) {
+                    logger.info("Generated KDoc file: $filePath.json")
+                }
+            } catch (e: Exception) {
+                logger.error("Failed to write KDoc file for $className: ${e.message}")
+            }
+        }
     }
 
     /** This looks up all classes that should be processed for the given configuration parameters. */
@@ -174,9 +213,9 @@ class KDocProcessor(
             fields = fields,
         )
 
-        // Include source file dependencies for proper incremental compilation
-        val sourceFiles = setOfNotNull(classDeclaration.containingFile)
-        writeKDocToFile(className, classKDoc, sourceFiles)
+        // Store for later writing in finish()
+        collectedKDocs[className] = classKDoc
+        classDeclaration.containingFile?.let { sourceFiles[className] = it }
     }
 
     private fun processFunction(
@@ -516,36 +555,6 @@ class KDocProcessor(
         }
     }
 
-    private fun writeKDocToFile(className: String, classKDoc: ClassKDoc, sourceFiles: Set<KSFile> = emptySet()) {
-        val resourcePath = "kdoc/${className.replace('.', '/')}.json"
-
-        try {
-            // Create proper dependencies from source files to ensure incremental compilation works correctly
-            val dependencies = if (sourceFiles.isNotEmpty()) {
-                Dependencies(true, *sourceFiles.toTypedArray())
-            } else {
-                Dependencies(false)
-            }
-
-            val file = codeGenerator.createNewFile(
-                dependencies = dependencies,
-                packageName = "",
-                fileName = resourcePath,
-                extensionName = ""
-            )
-
-            file.use { outputStream ->
-                val jsonString = json.encodeToString(classKDoc)
-                outputStream.write(jsonString.toByteArray())
-            }
-
-            if (debugMode) {
-                logger.info("Generated KDoc file: $resourcePath with ${sourceFiles.size} dependencies")
-            }
-        } catch (e: Exception) {
-            logger.error("Failed to write KDoc file for $className: ${e.message}")
-        }
-    }
 }
 
 /**
