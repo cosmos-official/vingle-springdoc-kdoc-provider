@@ -1,5 +1,6 @@
 package dev.vingle.kdoc.processor
 
+import com.google.devtools.ksp.closestClassDeclaration
 import com.google.devtools.ksp.processing.CodeGenerator
 import com.google.devtools.ksp.processing.Dependencies
 import com.google.devtools.ksp.processing.KSPLogger
@@ -9,10 +10,13 @@ import com.google.devtools.ksp.processing.SymbolProcessorEnvironment
 import com.google.devtools.ksp.processing.SymbolProcessorProvider
 import com.google.devtools.ksp.symbol.KSAnnotated
 import com.google.devtools.ksp.symbol.KSClassDeclaration
+import com.google.devtools.ksp.symbol.KSDeclaration
 import com.google.devtools.ksp.symbol.KSFile
 import com.google.devtools.ksp.symbol.KSFunctionDeclaration
+import com.google.devtools.ksp.symbol.KSPropertyDeclaration
 import dev.vingle.kdoc.model.ClassKDoc
 import dev.vingle.kdoc.model.CommentKDoc
+import dev.vingle.kdoc.model.FieldKDoc
 import dev.vingle.kdoc.model.MethodKDoc
 import dev.vingle.kdoc.model.OtherKDoc
 import dev.vingle.kdoc.model.ParamKDoc
@@ -23,16 +27,16 @@ import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * KSP processor that extracts KDoc comments and generates JSON files for runtime access
+ * KSP processor that extracts KDoc comments and generates JSON files for runtime access.
  */
 class KDocProcessor(
     private val codeGenerator: CodeGenerator,
     private val logger: KSPLogger,
-    private val options: Map<String, String>
+    options: Map<String, String>,
 ) : SymbolProcessor {
 
     private val json = Json {
-        prettyPrint = true
+        prettyPrint = debugMode
         ignoreUnknownKeys = true
     }
 
@@ -40,6 +44,13 @@ class KDocProcessor(
     private val disableCache = options["kdoc.disable-cache"]?.toBoolean() ?: false
     private val forceRegenerate = options["kdoc.force-regenerate"]?.toBoolean() ?: false
     private val debugMode = options["kdoc.debug"]?.toBoolean() ?: false
+    private val targetAnnotation = "org.springframework.web.bind.annotation.RestController"
+
+    /**
+     * By default, only Spring `RestController` annotated classes are considered for processing. Setting this parameter
+     * to `"true"` disables that requirement, meaning all classes will be processed.
+     */
+    private val targetAllFiles = options["kdoc.all-files"]?.toBoolean() ?: false
 
     // Thread-safe collections for concurrent access
     private val processedClasses = ConcurrentHashMap.newKeySet<String>()
@@ -59,12 +70,10 @@ class KDocProcessor(
             }
         }
 
-        val symbols = resolver.getSymbolsWithAnnotation("org.springframework.web.bind.annotation.RestController")
-            .filterIsInstance<KSClassDeclaration>()
-            .filter { shouldProcessClass(it) }
+        val symbols = getSymbolsToProcess(resolver)
 
         if (debugMode) {
-            logger.info("Found ${symbols.count()} RestController classes to process")
+            logger.info("Found ${symbols.count()} classes to process")
         }
 
         symbols.forEach { classSymbol ->
@@ -124,6 +133,28 @@ class KDocProcessor(
         }
     }
 
+    /** This looks up all classes that should be processed for the given configuration parameters. */
+    private fun getSymbolsToProcess(resolver: Resolver): Sequence<KSClassDeclaration> {
+        /** @return The given class and all classes that it contains. There is no depth limit for this lookup. */
+        fun withContainingClasses(declaration: KSClassDeclaration): Sequence<KSClassDeclaration> {
+            var newContainingClasses: Set<KSClassDeclaration> = setOf(declaration)
+            val allFoundDeclarations = mutableSetOf(declaration)
+            while (newContainingClasses.isNotEmpty()) {
+                newContainingClasses = newContainingClasses.flatMap(KSClassDeclaration::declarations)
+                    .filterIsInstance<KSClassDeclaration>().toSet()
+                allFoundDeclarations.addAll(newContainingClasses)
+            }
+            return allFoundDeclarations.asSequence()
+        }
+
+        return if (targetAllFiles) {
+            resolver.getNewFiles().flatMap(KSFile::declarations).mapNotNull(::findClassDeclaration)
+                .flatMap(::withContainingClasses).distinct()
+        } else {
+            resolver.getSymbolsWithAnnotation(targetAnnotation).filterIsInstance<KSClassDeclaration>()
+        }.filter(::shouldProcessClass)
+    }
+
     private fun shouldProcessClass(classDeclaration: KSClassDeclaration): Boolean {
         val packageName = classDeclaration.packageName.asString()
         return processedPackages?.any { packageName.startsWith(it) } ?: true
@@ -158,18 +189,11 @@ class KDocProcessor(
         processedClasses.add(className)
         classContentHashes[className] = contentHash
 
-        val methods = mutableListOf<MethodKDoc>()
-        val constructors = mutableListOf<MethodKDoc>()
-
         // Process functions
-        classDeclaration.getAllFunctions().forEach { function ->
-            val methodKDoc = processFunction(function)
-            if (methodKDoc != null) {
-                methods.add(methodKDoc)
-            }
-        }
+        val methods = classDeclaration.getAllFunctions().mapNotNull(::processFunction).toList()
 
         // Process constructors
+        val constructors = mutableListOf<MethodKDoc>()
         classDeclaration.primaryConstructor?.let { constructor ->
             val constructorKDoc = processFunction(constructor, isConstructor = true)
             if (constructorKDoc != null) {
@@ -178,13 +202,15 @@ class KDocProcessor(
         }
 
         val parsedClassKDoc = parseKDocComment(classDeclaration.docString)
+        val fields = processFields(classDeclaration, parsedClassKDoc)
         val classKDoc = ClassKDoc(
             name = className,
             comment = parsedClassKDoc.mainComment,
             methods = methods,
             constructors = constructors,
             seeAlso = parsedClassKDoc.seeAlso,
-            other = parsedClassKDoc.other
+            other = parsedClassKDoc.other,
+            fields = fields,
         )
 
         // Store for later writing in finish()
@@ -201,14 +227,14 @@ class KDocProcessor(
             val paramTypes = function.parameters.map { param ->
                 try {
                     param.type.resolve().declaration.simpleName.asString()
-                } catch (e: Exception) {
+                } catch (_: Exception) {
                     // Fallback for unresolved types - handle more gracefully
                     try {
                         // Try to get a more meaningful name from the type string
                         val typeString = param.type.toString()
                         // Extract simple name from complex types like "ProductFolderStatus?" or "kotlin.Int?"
                         typeString.substringAfterLast('.').substringBefore('?').substringBefore('<')
-                    } catch (fallbackException: Exception) {
+                    } catch (_: Exception) {
                         // Last resort fallback
                         "Unknown"
                     }
@@ -232,7 +258,7 @@ class KDocProcessor(
                 throws = parsedKDoc.throws,
                 seeAlso = parsedKDoc.seeAlso,
                 other = parsedKDoc.other,
-                isConstructor = isConstructor
+                isConstructor = isConstructor,
             )
         } catch (e: Exception) {
             logger.error("Error processing function ${function.simpleName.asString()}: ${e.message}")
@@ -242,12 +268,7 @@ class KDocProcessor(
                     name = function.simpleName.asString(),
                     paramTypes = function.parameters.map { "Unknown" },
                     comment = CommentKDoc.empty(),
-                    params = emptyList(),
-                    returns = CommentKDoc.empty(),
-                    throws = emptyList(),
-                    seeAlso = emptyList(),
-                    other = emptyList(),
-                    isConstructor = isConstructor
+                    isConstructor = isConstructor,
                 )
             } catch (finalException: Exception) {
                 logger.error("Failed to create minimal MethodKDoc for ${function.simpleName.asString()}: ${finalException.message}")
@@ -257,8 +278,26 @@ class KDocProcessor(
     }
 
     /**
-     * Calculate a hash of the class content to determine if regeneration is needed
-     * Uses sorted order to ensure consistent hashing regardless of processing order
+     * Goes through all fields of the class and attempts to find a respective comment.
+     * The following order of priority is used:
+     * 1. A comment directly on the field.
+     * 2. A `@param` tag for the property declared on the class.
+     */
+    private fun processFields(classDeclaration: KSClassDeclaration, classDoc: ParsedKDoc): List<FieldKDoc> {
+        return classDeclaration.declarations.filterIsInstance<KSPropertyDeclaration>().map { property ->
+            val comment = parseKDocComment(property.docString).mainComment.takeUnless(CommentKDoc::isEmpty)
+                ?: classDoc.params.singleOrNull { it.name == property.simpleName.getShortName() }?.comment
+                ?: CommentKDoc.empty()
+            FieldKDoc(
+                name = property.simpleName.asString(),
+                comment = comment,
+            )
+        }.toList()
+    }
+
+    /**
+     * Calculate a hash of the class content to determine if regeneration is needed.
+     * Uses sorted order to ensure consistent hashing regardless of processing order.
      */
     private fun calculateClassContentHash(classDeclaration: KSClassDeclaration): String {
         val content = StringBuilder()
@@ -275,29 +314,29 @@ class KDocProcessor(
                 val paramTypesStr = function.parameters.joinToString(",") { param ->
                     try {
                         param.type.resolve().declaration.simpleName.asString()
-                    } catch (e: Exception) {
+                    } catch (_: Exception) {
                         try {
                             val typeString = param.type.toString()
                             typeString.substringAfterLast('.').substringBefore('?').substringBefore('<')
-                        } catch (fallbackException: Exception) {
+                        } catch (_: Exception) {
                             "Unknown"
                         }
                     }
                 }
                 "${function.simpleName.asString()}_$paramTypesStr"
             }
-        
+
         functions.forEach { function ->
             content.append(function.simpleName.asString())
             content.append(function.parameters.joinToString(",") { param ->
                 try {
                     param.type.resolve().declaration.simpleName.asString()
-                } catch (e: Exception) {
+                } catch (_: Exception) {
                     // Fallback for unresolved types - handle more gracefully
                     try {
                         val typeString = param.type.toString()
                         typeString.substringAfterLast('.').substringBefore('?').substringBefore('<')
-                    } catch (fallbackException: Exception) {
+                    } catch (_: Exception) {
                         "Unknown"
                     }
                 }
@@ -311,12 +350,12 @@ class KDocProcessor(
             content.append(constructor.parameters.joinToString(",") { param ->
                 try {
                     param.type.resolve().declaration.simpleName.asString()
-                } catch (e: Exception) {
+                } catch (_: Exception) {
                     // Fallback for unresolved types - handle more gracefully
                     try {
                         val typeString = param.type.toString()
                         typeString.substringAfterLast('.').substringBefore('?').substringBefore('<')
-                    } catch (fallbackException: Exception) {
+                    } catch (_: Exception) {
                         "Unknown"
                     }
                 }
@@ -357,7 +396,7 @@ class KDocProcessor(
         var returns = CommentKDoc.empty()
 
         var currentSection: String? = null
-        var currentContent = mutableListOf<String>()
+        val currentContent = mutableListOf<String>()
 
         for (line in lines) {
             when {
@@ -528,5 +567,12 @@ class KDocProcessorProvider : SymbolProcessorProvider {
             logger = environment.logger,
             options = environment.options
         )
+    }
+}
+
+private fun findClassDeclaration(declaration: KSDeclaration): KSClassDeclaration? {
+    return when {
+        declaration is KSClassDeclaration -> declaration
+        else -> declaration.closestClassDeclaration()
     }
 }

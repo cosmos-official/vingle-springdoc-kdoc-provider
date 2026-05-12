@@ -14,4 +14,17 @@ dependencies {
 
     // Reference to runtime module for data models
     implementation(project(":kdoc-runtime"))
-} 
+
+    testImplementation(kotlin("test"))
+    testImplementation(testFixtures(project(":kdoc-runtime")))
+    testImplementation(libs.org.junit.jupiter.junit.jupiter.api)
+    testImplementation(libs.org.junit.jupiter.junit.jupiter.params)
+    testImplementation(libs.dev.zacsweers.kctfork.ksp)
+
+    testRuntimeOnly(libs.org.junit.jupiter.junit.jupiter.engine)
+    testRuntimeOnly(libs.org.junit.platform.junit.platform.launcher)
+}
+
+tasks.test {
+    useJUnitPlatform()
+}

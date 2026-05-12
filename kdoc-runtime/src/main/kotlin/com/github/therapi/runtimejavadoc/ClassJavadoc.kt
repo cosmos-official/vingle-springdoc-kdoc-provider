@@ -22,10 +22,6 @@ class ClassJavadoc private constructor(
     fun getSeeAlso(): List<SeeAlsoJavadoc> = kDoc.seeAlso.map { SeeAlsoJavadoc.fromKDoc(it) }
     
     fun getOther(): List<OtherJavadoc> = kDoc.other.map { OtherJavadoc.fromKDoc(it) }
-
-    fun getFields(): List<FieldJavadoc> {
-        return emptyList()
-    }
     
     /**
      * Get record components (for compatibility with newer therapi versions).
@@ -33,8 +29,10 @@ class ClassJavadoc private constructor(
      */
     fun getRecordComponents(): List<ParamJavadoc> = emptyList()
 
+    fun getFields(): List<FieldJavadoc> = kDoc.fields.map { FieldJavadoc.fromKDoc(it) }
+
     companion object {
         @JvmStatic
         fun fromKDoc(kDoc: ClassKDoc): ClassJavadoc = ClassJavadoc(kDoc)
     }
-} 
+}

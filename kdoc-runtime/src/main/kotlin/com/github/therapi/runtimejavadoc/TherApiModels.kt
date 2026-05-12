@@ -53,9 +53,9 @@ class MethodJavadoc private constructor(
         fun createEmpty(executable: Executable): MethodJavadoc {
             return MethodJavadoc(
                 MethodKDoc(
-                    name = "",
+                    name = executable.name,
                     paramTypes = listOf(),
-                    comment = CommentKDoc.empty()
+                    comment = CommentKDoc.empty(),
                 )
             )
         }
@@ -132,26 +132,25 @@ class OtherJavadoc private constructor(
  * Compatibility layer for therapi FieldJavadoc
  */
 class FieldJavadoc private constructor(
-    private val name: String,
-    private val comment: Comment
+    private val kDoc: FieldKDoc,
 ) {
-    
-    fun getName(): String = name
-    
-    fun getComment(): Comment = comment
-    
+
+    fun getName(): String = kDoc.name
+
+    fun getComment(): Comment = Comment.fromKDoc(kDoc.comment)
+
     companion object {
         @JvmStatic
-        fun empty(fieldName: String): FieldJavadoc = FieldJavadoc(
-            name = fieldName,
-            comment = Comment.fromKDoc(CommentKDoc.empty())
-        )
+        fun empty(fieldName: String): FieldJavadoc = FieldJavadoc(FieldKDoc.empty(fieldName))
 
         @JvmStatic
         fun createEmpty(executable: Executable): FieldJavadoc = empty(executable.name)
 
         @JvmStatic
         fun createEmpty(fieldName: String): FieldJavadoc = empty(fieldName)
+
+        @JvmStatic
+        fun fromKDoc(kDoc: FieldKDoc): FieldJavadoc = FieldJavadoc(kDoc)
     }
 }
 

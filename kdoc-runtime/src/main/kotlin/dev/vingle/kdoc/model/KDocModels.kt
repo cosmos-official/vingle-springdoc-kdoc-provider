@@ -58,7 +58,7 @@ data class CommentKDoc(
 }
 
 /**
- * Represents an inline tag in KDoc comment
+ * Represents an `@inline` tag in KDoc comment
  */
 @Serializable
 data class InlineTagKDoc(
@@ -67,7 +67,7 @@ data class InlineTagKDoc(
 )
 
 /**
- * Represents a @param tag in KDoc
+ * Represents a `@param` tag in KDoc
  */
 @Serializable
 data class ParamKDoc(
@@ -76,7 +76,7 @@ data class ParamKDoc(
 )
 
 /**
- * Represents a @throws tag in KDoc
+ * Represents a `@throws` tag in KDoc
  */
 @Serializable
 data class ThrowsKDoc(
@@ -85,7 +85,7 @@ data class ThrowsKDoc(
 )
 
 /**
- * Represents a @see tag in KDoc
+ * Represents a `@see` tag in KDoc
  */
 @Serializable
 data class SeeAlsoKDoc(
@@ -93,7 +93,7 @@ data class SeeAlsoKDoc(
 )
 
 /**
- * Represents other KDoc tags like @author, @since, etc.
+ * Represents other KDoc tags like `@author`, `@since`, etc.
  */
 @Serializable
 data class OtherKDoc(

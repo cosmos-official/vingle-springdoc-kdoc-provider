@@ -6,7 +6,7 @@ import org.junit.jupiter.api.assertNull
 import org.springdoc.core.providers.SpringDocJavadocProvider
 
 /** This test class ensures that the compatibility layer code works with SpringDoc. */
-internal class SpringDocCompatibility {
+class SpringDocCompatibility {
     /**
      * This tests the fallback branches in [SpringDocJavadocProvider], which usually call a static function for the
      * given target object in `TherApiModels` to create an empty instance.
@@ -30,7 +30,7 @@ internal class SpringDocCompatibility {
     }
 }
 
-internal class ExampleClass {
+private class ExampleClass {
     @JvmField
     val exampleField = "value"
 
@@ -38,4 +38,4 @@ internal class ExampleClass {
 }
 
 @JvmRecord
-internal data class ExampleRecord(val value: String)
+private data class ExampleRecord(val value: String)

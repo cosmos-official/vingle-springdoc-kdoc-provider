@@ -1,7 +1,10 @@
 package dev.vingle.kdoc
 
 import dev.vingle.kdoc.model.ClassKDoc
+import dev.vingle.kdoc.model.FieldKDoc
 import kotlinx.serialization.json.Json
+import org.jetbrains.annotations.TestOnly
+import java.lang.reflect.Field
 import java.lang.reflect.Method
 import kotlin.reflect.KClass
 
@@ -12,34 +15,40 @@ object RuntimeKDoc {
     
     private val json = Json { ignoreUnknownKeys = true }
     private val classKDocCache = mutableMapOf<String, ClassKDoc>()
-    
-    // Type mapping for primitive vs boxed types - organized in pairs for easier maintenance
+
+    /** Type mapping for primitive vs boxed types - organized in pairs for easier maintenance */
     private val primitiveToBoxed = mapOf(
-        "long" to "Long", "boolean" to "Boolean", "int" to "Int", 
+        "long" to "Long", "boolean" to "Boolean", "int" to "Int",
         "double" to "Double", "float" to "Float", "byte" to "Byte",
-        "short" to "Short", "char" to "Char"
+        "short" to "Short", "char" to "Char",
+
+        "long[]" to "LongArray", "boolean[]" to "BooleanArray", "int[]" to "IntArray",
+        "double[]" to "DoubleArray", "float[]" to "FloatArray", "byte[]" to "ByteArray",
+        "short[]" to "ShortArray", "char[]" to "CharArray",
     )
-    
     private val boxedToPrimitive = primitiveToBoxed.entries.associate { it.value to it.key }
-    
-    // Additional Kotlin-Java type mappings
+
+    /** Additional Kotlin-Java type mappings */
     private val kotlinToJavaTypes = mapOf(
         "Int" to "Integer", "Long" to "Long", "Boolean" to "Boolean",
         "Double" to "Double", "Float" to "Float", "Byte" to "Byte",
-        "Short" to "Short", "Char" to "Character"
+        "Short" to "Short", "Char" to "Character",
+
+        "IntArray" to "int[]", "LongArray" to "long[]", "BooleanArray" to "boolean[]",
+        "DoubleArray" to "double[]", "FloatArray" to "float[]", "ByteArray" to "byte[]",
+        "ShortArray" to "short[]", "CharArray" to "char[]",
     )
-    
     private val javaToKotlinTypes = kotlinToJavaTypes.entries.associate { it.value to it.key }
     
     /**
      * Get KDoc documentation for a class
      */
     fun getKDoc(clazz: Class<*>): ClassKDoc {
-        return getKDoc(clazz.name)
+        return getKDoc(fullyQualifiedClassName = clazz.kotlin.qualifiedName ?: clazz.name)
     }
-    
+
     /**
-     * Get KDoc documentation for a class by fully qualified name
+     * Get KDoc documentation for a class by its fully qualified name.
      */
     fun getKDoc(fullyQualifiedClassName: String): ClassKDoc {
         // Check cache first
@@ -52,8 +61,9 @@ object RuntimeKDoc {
         val classKDoc = try {
             val jsonText = resource.use { it.readBytes().decodeToString() }
             json.decodeFromString<ClassKDoc>(jsonText)
-        } catch (_: Exception) {
-            // Log specific exception types if needed for debugging
+        } catch (exception: Exception) {
+            if (isDebugEnabled) // Log specific exception types if needed for debugging
+                println("DEBUG: Failed to parse documentation for class '$fullyQualifiedClassName': $exception")
             createEmptyClassKDoc(fullyQualifiedClassName)
         }
         
@@ -69,10 +79,7 @@ object RuntimeKDoc {
         val classKDoc = getKDoc(method.declaringClass)
         val paramTypeNames = method.parameterTypes.map { it.simpleName }
 
-        // Debug logging - can be enabled for troubleshooting
-        val debugEnabled = System.getProperty("kdoc.debug", "false").toBoolean()
-        
-        if (debugEnabled) {
+        if (isDebugEnabled) {
             println("DEBUG: Looking for method ${method.name} with param types: $paramTypeNames")
             println("DEBUG: Available methods in ${method.declaringClass.simpleName}:")
             classKDoc.methods.forEach { methodKDoc ->
@@ -84,8 +91,8 @@ object RuntimeKDoc {
             val nameMatch = methodKDoc.name == method.name
             val sizeMatch = methodKDoc.paramTypes.size == paramTypeNames.size
             val typeMatch = isParameterTypesMatch(methodKDoc.paramTypes, paramTypeNames)
-            
-            if (debugEnabled && nameMatch) {
+
+            if (isDebugEnabled && nameMatch) {
                 println("DEBUG: Checking ${methodKDoc.name}: nameMatch=$nameMatch, sizeMatch=$sizeMatch, typeMatch=$typeMatch")
                 if (sizeMatch && !typeMatch) {
                     println("DEBUG: Type mismatch details:")
@@ -108,7 +115,15 @@ object RuntimeKDoc {
     fun getKDoc(kclass: KClass<*>): ClassKDoc {
         return getKDoc(kclass.java)
     }
-    
+
+    /**
+     * Get KDoc documentation for a specific field.
+     */
+    fun getKDoc(field: Field): FieldKDoc {
+        val classKDoc = getKDoc(field.declaringClass)
+        return classKDoc.fields.singleOrNull { it.name == field.name } ?: FieldKDoc.empty(field.name)
+    }
+
     /**
      * Check if parameter types match, considering primitive vs boxed types
      */
@@ -153,7 +168,30 @@ object RuntimeKDoc {
     private fun createEmptyClassKDoc(className: String): ClassKDoc {
         return ClassKDoc(
             name = className,
-            comment = dev.vingle.kdoc.model.CommentKDoc.empty()
+            comment = dev.vingle.kdoc.model.CommentKDoc.empty(),
         )
     }
-} 
+
+    /**
+     * This function can be used to manually clear the cache in order to free up some memory.
+     *
+     * ### Example
+     * One can provide their own `SpringDocJavadocProvider` implementation which calls this method.
+     * ```kotlin
+     * class MySpringDocJavadocProvider : SpringDocJavadocProvider {
+     *    override fun clearCache() {
+     *       super.clearCache()
+     *       RuntimeKDoc.clearCache()
+     *    }
+     * }
+     * ```
+     */
+    fun clearCache(): Unit = classKDocCache.clear()
+
+    /** This method is used to test the [clearCache] function. */
+    @get:TestOnly
+    internal val currentCacheSize get() = classKDocCache.size
+}
+
+/** Debug logging - can be enabled for troubleshooting */
+private val isDebugEnabled = System.getProperty("kdoc.debug", "false").toBoolean()
