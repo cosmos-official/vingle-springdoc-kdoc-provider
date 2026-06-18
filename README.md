@@ -1,5 +1,3 @@
-[![](https://jitpack.io/v/cosmos-official/vingle-springdoc-kdoc-provider.svg)](https://jitpack.io/#cosmos-official/vingle-springdoc-kdoc-provider)
-
 # Vingle SpringDoc KDoc Provider
 
 A Kotlin library that provides KDoc documentation to SpringDoc OpenAPI, compatible with `therapi-runtime-javadoc` API.
@@ -34,11 +32,12 @@ Add the dependencies:
 
 ```kotlin
 dependencies {
-    implementation("com.github.cosmos-official.vingle-springdoc-kdoc-provider:kdoc-runtime:v1.1.0")
-    ksp("com.github.cosmos-official.vingle-springdoc-kdoc-provider:kdoc-processor:v1.1.0")
+    implementation("com.github.cosmos-official.vingle-springdoc-kdoc-provider:kdoc-runtime:v0.0.0")
+    ksp("com.github.cosmos-official.vingle-springdoc-kdoc-provider:kdoc-processor:v0.0.0")
 }
 ```
-
+- Replace `0.0.0` with exact version.
+- The latest version is: [![](https://jitpack.io/v/cosmos-official/vingle-springdoc-kdoc-provider.svg)](https://jitpack.io/#cosmos-official/vingle-springdoc-kdoc-provider)
 ## Usage
 
 ### 1. Add KDoc to your controllers
