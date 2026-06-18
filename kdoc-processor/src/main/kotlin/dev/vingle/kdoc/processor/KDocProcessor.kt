@@ -14,6 +14,8 @@ import com.google.devtools.ksp.symbol.KSDeclaration
 import com.google.devtools.ksp.symbol.KSFile
 import com.google.devtools.ksp.symbol.KSFunctionDeclaration
 import com.google.devtools.ksp.symbol.KSPropertyDeclaration
+import com.google.devtools.ksp.symbol.KSType
+import com.google.devtools.ksp.symbol.KSValueParameter
 import dev.vingle.kdoc.model.ClassKDoc
 import dev.vingle.kdoc.model.CommentKDoc
 import dev.vingle.kdoc.model.FieldKDoc
@@ -224,22 +226,7 @@ class KDocProcessor(
     ): MethodKDoc? {
         return try {
             val functionName = function.simpleName.asString()
-            val paramTypes = function.parameters.map { param ->
-                try {
-                    param.type.resolve().declaration.simpleName.asString()
-                } catch (_: Exception) {
-                    // Fallback for unresolved types - handle more gracefully
-                    try {
-                        // Try to get a more meaningful name from the type string
-                        val typeString = param.type.toString()
-                        // Extract simple name from complex types like "ProductFolderStatus?" or "kotlin.Int?"
-                        typeString.substringAfterLast('.').substringBefore('?').substringBefore('<')
-                    } catch (_: Exception) {
-                        // Last resort fallback
-                        "Unknown"
-                    }
-                }
-            }
+            val paramTypes = function.parameters.map(::getJavaParameterTypeName)
 
             val parsedKDoc = try {
                 parseKDocComment(function.docString)
@@ -295,6 +282,63 @@ class KDocProcessor(
         }.toList()
     }
 
+    private fun getJavaParameterTypeName(param: KSValueParameter): String {
+        return try {
+            param.type.resolve().toJavaTypeName()
+        } catch (_: Exception) {
+            // Fallback for unresolved types - handle more gracefully
+            try {
+                // Try to get a meaningful name from the type string.
+                param.type.toString().substringBefore('?').substringBefore('<')
+            } catch (_: Exception) {
+                // Last resort fallback
+                "Unknown"
+            }
+        }
+    }
+
+    private fun KSType.toJavaTypeName(): String {
+        val qualifiedName = declaration.qualifiedName?.asString()
+        val simpleName = declaration.simpleName.asString()
+
+        return when (qualifiedName) {
+            "kotlin.Boolean" -> if (isMarkedNullable) "java.lang.Boolean" else "boolean"
+            "kotlin.Byte" -> if (isMarkedNullable) "java.lang.Byte" else "byte"
+            "kotlin.Short" -> if (isMarkedNullable) "java.lang.Short" else "short"
+            "kotlin.Int" -> if (isMarkedNullable) "java.lang.Integer" else "int"
+            "kotlin.Long" -> if (isMarkedNullable) "java.lang.Long" else "long"
+            "kotlin.Float" -> if (isMarkedNullable) "java.lang.Float" else "float"
+            "kotlin.Double" -> if (isMarkedNullable) "java.lang.Double" else "double"
+            "kotlin.Char" -> if (isMarkedNullable) "java.lang.Character" else "char"
+            "kotlin.String" -> "java.lang.String"
+            "kotlin.Any" -> "java.lang.Object"
+            "kotlin.Unit" -> "void"
+            "kotlin.BooleanArray" -> "boolean[]"
+            "kotlin.ByteArray" -> "byte[]"
+            "kotlin.ShortArray" -> "short[]"
+            "kotlin.IntArray" -> "int[]"
+            "kotlin.LongArray" -> "long[]"
+            "kotlin.FloatArray" -> "float[]"
+            "kotlin.DoubleArray" -> "double[]"
+            "kotlin.CharArray" -> "char[]"
+            "kotlin.Array" -> {
+                val elementType = arguments.firstOrNull()?.type?.resolve()?.toJavaTypeName() ?: "java.lang.Object"
+                "$elementType[]"
+            }
+            "kotlin.collections.Iterable" -> "java.lang.Iterable"
+            "kotlin.collections.MutableIterable" -> "java.lang.Iterable"
+            "kotlin.collections.Collection" -> "java.util.Collection"
+            "kotlin.collections.MutableCollection" -> "java.util.Collection"
+            "kotlin.collections.List" -> "java.util.List"
+            "kotlin.collections.MutableList" -> "java.util.List"
+            "kotlin.collections.Set" -> "java.util.Set"
+            "kotlin.collections.MutableSet" -> "java.util.Set"
+            "kotlin.collections.Map" -> "java.util.Map"
+            "kotlin.collections.MutableMap" -> "java.util.Map"
+            else -> qualifiedName ?: simpleName
+        }
+    }
+
     /**
      * Calculate a hash of the class content to determine if regeneration is needed.
      * Uses sorted order to ensure consistent hashing regardless of processing order.
@@ -311,55 +355,20 @@ class KDocProcessor(
         // Include function signatures and KDoc - sorted by name for consistency
         val functions = classDeclaration.getAllFunctions()
             .sortedBy { function ->
-                val paramTypesStr = function.parameters.joinToString(",") { param ->
-                    try {
-                        param.type.resolve().declaration.simpleName.asString()
-                    } catch (_: Exception) {
-                        try {
-                            val typeString = param.type.toString()
-                            typeString.substringAfterLast('.').substringBefore('?').substringBefore('<')
-                        } catch (_: Exception) {
-                            "Unknown"
-                        }
-                    }
-                }
+                val paramTypesStr = function.parameters.joinToString(",", transform = ::getJavaParameterTypeName)
                 "${function.simpleName.asString()}_$paramTypesStr"
             }
 
         functions.forEach { function ->
             content.append(function.simpleName.asString())
-            content.append(function.parameters.joinToString(",") { param ->
-                try {
-                    param.type.resolve().declaration.simpleName.asString()
-                } catch (_: Exception) {
-                    // Fallback for unresolved types - handle more gracefully
-                    try {
-                        val typeString = param.type.toString()
-                        typeString.substringAfterLast('.').substringBefore('?').substringBefore('<')
-                    } catch (_: Exception) {
-                        "Unknown"
-                    }
-                }
-            })
+            content.append(function.parameters.joinToString(",", transform = ::getJavaParameterTypeName))
             content.append(function.docString ?: "")
         }
 
         // Include constructor
         classDeclaration.primaryConstructor?.let { constructor ->
             content.append("constructor")
-            content.append(constructor.parameters.joinToString(",") { param ->
-                try {
-                    param.type.resolve().declaration.simpleName.asString()
-                } catch (_: Exception) {
-                    // Fallback for unresolved types - handle more gracefully
-                    try {
-                        val typeString = param.type.toString()
-                        typeString.substringAfterLast('.').substringBefore('?').substringBefore('<')
-                    } catch (_: Exception) {
-                        "Unknown"
-                    }
-                }
-            })
+            content.append(constructor.parameters.joinToString(",", transform = ::getJavaParameterTypeName))
             content.append(constructor.docString ?: "")
         }
 

@@ -89,7 +89,7 @@ class GenerateDocumentationFileTest {
             }
             assertNotNull(matchingMethod, "Expected method '${expectedMethod.name}' to exist in the output.\n$json")
             assertIterableEquals(
-                expectedMethod.parameters.map { it.type.kotlin.simpleName },
+                expectedMethod.parameterTypes.map { it.canonicalName },
                 matchingMethod!!["paramTypes"]?.jsonArray?.map { it.jsonPrimitive.content },
             )
             assertEquals(

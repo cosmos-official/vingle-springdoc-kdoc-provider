@@ -7,6 +7,21 @@ import org.springdoc.core.providers.SpringDocJavadocProvider
 
 /** This test class ensures that the compatibility layer code works with SpringDoc. */
 class SpringDocCompatibility {
+    @Test
+    fun runWithParameterizedMethod() {
+        val exampleMethod = ExampleClassWithDocs::class.java.getMethod(
+            ExampleClassWithDocs::methodWithParameters.name,
+            String::class.java,
+        )
+        val springDocProvider = SpringDocJavadocProvider()
+
+        assertEquals(
+            "A documented method that *does* have parameters.",
+            springDocProvider.getMethodJavadocDescription(exampleMethod),
+        )
+        assertEquals("A parameter that's also documented.", springDocProvider.getParamJavadoc(exampleMethod, "textParameter"))
+    }
+
     /**
      * This tests the fallback branches in [SpringDocJavadocProvider], which usually call a static function for the
      * given target object in `TherApiModels` to create an empty instance.

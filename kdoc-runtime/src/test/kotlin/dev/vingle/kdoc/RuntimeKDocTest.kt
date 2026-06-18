@@ -58,6 +58,19 @@ class RuntimeKDocTest {
         assertEquals(0, methodKDoc.returns.inlineTags.size)
         assertTrue(methodKDoc.returns.text.startsWith("Does not return"))
     }
+
+    @Test
+    fun getMethodKDocWithParameters() {
+        val targetMethod = ExampleClassWithDocs::class.java.getDeclaredMethod("methodWithParameters", String::class.java)
+        val methodKDoc = RuntimeKDoc.getKDoc(targetMethod)
+
+        assertFalse(methodKDoc.isConstructor)
+        assertIterableEquals(listOf("java.lang.String"), methodKDoc.paramTypes)
+        assertEquals("A documented method that *does* have parameters.", methodKDoc.comment.text)
+        val param = methodKDoc.params.single()
+        assertEquals("textParameter", param.name)
+        assertEquals("A parameter that's also documented.", param.comment.text)
+    }
 }
 
 /** This class does not have a corresponding JSON file on the classpath.  */
